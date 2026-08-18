@@ -1,0 +1,74 @@
+name: accessmesh
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: accessmesh
+      POSTGRES_USER: accessmesh
+      POSTGRES_PASSWORD: accessmesh
+    ports:
+      - "55432:5432"
+    volumes:
+      - accessmesh-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U accessmesh -d accessmesh"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  opa:
+    image: openpolicyagent/opa:1.7.1-static
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies"]
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./policies:/policies:ro
+    healthcheck:
+      test: ["CMD", "/opa", "eval", "1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://accessmesh:accessmesh@postgres:5432/accessmesh
+      OPA_URL: http://opa:8181
+    ports:
+      - "18000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    command: ["sh", "-c", "alembic upgrade head && uvicorn accessmesh.main:app --host 0.0.0.0 --port 8000"]
+
+  expiry-scanner:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://accessmesh:accessmesh@postgres:5432/accessmesh
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "accessmesh.jobs.expiry_scan", "--interval", "60"]
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+    ports:
+      - "15173:80"
+    depends_on:
+      - api
+
+volumes:
+  accessmesh-postgres:
