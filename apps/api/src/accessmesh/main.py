@@ -1,3 +1,5 @@
+"""FastAPI 应用入口，负责初始化中间件、路由和生命周期任务。"""
+
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -15,6 +17,8 @@ configure_logging()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """在开发或演示环境启动时写入可重复使用的样例数据。"""
+
     if settings.app_env in {"development", "demo"}:
         await seed()
     yield

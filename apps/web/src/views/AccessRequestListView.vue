@@ -6,6 +6,7 @@ import type { AccessRequest } from '../types'
 const rows = ref<AccessRequest[]>([])
 const loading = ref(true)
 
+/** 加载当前身份可见的申请，并确保请求结束后关闭加载态。 */
 async function load() {
   loading.value = true
   try {
@@ -16,6 +17,7 @@ async function load() {
 }
 
 onMounted(load)
+// 身份切换不会重建当前页面，因此通过全局事件主动刷新列表。
 window.addEventListener('accessmesh:identity-changed', load)
 </script>
 

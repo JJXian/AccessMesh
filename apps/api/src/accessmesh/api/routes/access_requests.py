@@ -1,3 +1,5 @@
+"""权限申请的创建、列表与详情接口。"""
+
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -19,6 +21,9 @@ async def create_access_request(
     current_user: Annotated[DemoUser, Depends(get_current_demo_user)],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> AccessRequestRead:
+    """创建权限申请，并在同一事务中记录对应审计事件。"""
+
+    # “申请人 + 客户端请求号”构成幂等边界，前端重试不会创建重复申请。
     existing = await session.scalar(
         select(AccessRequest).where(
             AccessRequest.requester_external_id == current_user.external_id,
@@ -37,6 +42,7 @@ async def create_access_request(
         trace_id=trace_id,
     )
     session.add(request)
+    # 先 flush 获取数据库生成的申请主键，再用它关联审计事件。
     await session.flush()
     session.add(
         AuditEvent(
@@ -57,6 +63,8 @@ async def list_access_requests(
     current_user: Annotated[DemoUser, Depends(get_current_demo_user)],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[AccessRequestRead]:
+    """按时间倒序查询申请；普通申请人只能看到自己发起的记录。"""
+
     query = select(AccessRequest).order_by(AccessRequest.created_at.desc())
     if current_user.role == "requester":
         query = query.where(AccessRequest.requester_external_id == current_user.external_id)
@@ -70,6 +78,8 @@ async def get_access_request(
     current_user: Annotated[DemoUser, Depends(get_current_demo_user)],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> AccessRequestRead:
+    """查询申请详情，并阻止申请人读取他人的申请。"""
+
     request = await session.get(AccessRequest, request_id)
     if request is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="request not found")

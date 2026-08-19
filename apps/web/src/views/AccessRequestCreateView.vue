@@ -18,11 +18,13 @@ onMounted(async () => {
   users.value = await listDemoUsers()
 })
 
+/** 为每次用户提交生成唯一请求号，随后跳转到新申请详情。 */
 async function submit() {
   loading.value = true
   try {
     const result = await createAccessRequest({
       ...form,
+      // 后端使用该值实现创建接口幂等，避免网络重试产生重复申请。
       client_request_id: `web-${crypto.randomUUID()}`,
     })
     ElMessage.success('权限申请已创建')

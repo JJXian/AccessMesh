@@ -1,7 +1,11 @@
+"""LangGraph 权限申请工作流在节点间共享的状态结构。"""
+
 from typing import Any, TypedDict
 
 
 class AccessRequestState(TypedDict, total=False):
+    """工作流状态；字段为可选，以支持各节点逐步补全处理结果。"""
+
     request_id: str
     trace_id: str
     raw_request: str

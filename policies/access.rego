@@ -1,7 +1,9 @@
 package accessmesh
 
+# 默认拒绝：只有所有授权条件同时满足时才允许访问。
 default allow := false
 
+# 申请的权限必须在目标资源公开的可申请集合中。
 valid_permission if {
     input.grant.permission in input.resource.allowed_permissions
 }
@@ -10,6 +12,7 @@ active_subject if {
     input.subject.employment_status == "active"
 }
 
+# 生产权限最多保留 7 天，非生产环境最多保留 30 天。
 within_duration if {
     input.resource.environment == "production"
     input.grant.duration_days <= 7
@@ -37,6 +40,7 @@ allow if {
     contractor_allowed
 }
 
+# violations 独立收集所有失败条件，便于调用方一次性向用户解释拒绝原因。
 violations contains {"code": "SUBJECT_INACTIVE", "message": "subject is not active"} if {
     not active_subject
 }
@@ -63,6 +67,7 @@ risk_level := "high" if {
 
 default risk_level := "medium"
 
+# 对外只暴露结构稳定的决策对象，避免业务方依赖内部规则名称。
 decision := {
     "allow": allow,
     "risk_level": risk_level,

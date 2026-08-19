@@ -1,4 +1,4 @@
-"""Create initial AccessMesh scaffold tables."""
+"""创建 AccessMesh 初始数据表。"""
 
 from collections.abc import Sequence
 
@@ -13,6 +13,8 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    """创建用户、资源、权限申请和审计事件表及其索引。"""
+
     op.create_table(
         "users",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -81,6 +83,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """按依赖关系的逆序移除初始数据表。"""
+
     op.drop_table("audit_events")
     op.drop_table("access_requests")
     op.drop_table("resources")

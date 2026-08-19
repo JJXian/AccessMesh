@@ -2,10 +2,12 @@
 
 set -euo pipefail
 
+# 所有路径均从仓库根目录解析，保证脚本可从任意当前目录启动。
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
 if [[ ! -x .venv/bin/python ]]; then
+  # 项目固定使用 Python 3.12，缺失时给出明确提示而不是创建错误版本的环境。
   if ! command -v python3.12 >/dev/null 2>&1; then
     echo "未找到 Python 3.12，请先安装 Python 3.12。" >&2
     exit 1
@@ -14,6 +16,7 @@ if [[ ! -x .venv/bin/python ]]; then
 fi
 
 if ! .venv/bin/python -c 'import accessmesh, uvicorn' >/dev/null 2>&1; then
+  # 仅在关键包不可导入时安装依赖，缩短日常启动时间。
   .venv/bin/python -m pip install -e '.[dev]'
 fi
 
@@ -23,6 +26,7 @@ docker compose up -d --wait postgres opa
 export DATABASE_URL='postgresql+asyncpg://accessmesh:accessmesh@localhost:55432/accessmesh'
 export OPA_URL='http://localhost:8181'
 
+# 数据库就绪后先升级到最新结构，再启动支持热重载的开发服务器。
 echo "正在执行数据库迁移..."
 .venv/bin/alembic upgrade head
 

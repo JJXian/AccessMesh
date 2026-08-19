@@ -7,6 +7,7 @@ import { useIdentityStore } from '../stores/identity'
 
 const identity = useIdentityStore()
 
+// 组件挂载后加载可选身份；失败时保留默认身份并提示后端连接问题。
 onMounted(async () => {
   try {
     identity.setUsers(await listDemoUsers())

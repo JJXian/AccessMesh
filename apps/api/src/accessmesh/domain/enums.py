@@ -1,7 +1,11 @@
+"""领域对象使用的受限枚举值。"""
+
 from enum import StrEnum
 
 
 class RequestStatus(StrEnum):
+    """权限申请从提交、审批、执行到撤销的完整状态集合。"""
+
     SUBMITTED = "SUBMITTED"
     PARSING_REQUEST = "PARSING_REQUEST"
     NEED_CLARIFICATION = "NEED_CLARIFICATION"
@@ -20,18 +24,24 @@ class RequestStatus(StrEnum):
 
 
 class SubjectType(StrEnum):
+    """可接受权限的主体类型。"""
+
     EMPLOYEE = "employee"
     CONTRACTOR = "contractor"
     SERVICE_ACCOUNT = "service_account"
 
 
 class ResourceType(StrEnum):
+    """当前已支持接入的资源类型。"""
+
     GITLAB = "gitlab"
     DATABASE = "database"
     CLOUD = "cloud"
 
 
 class Environment(StrEnum):
+    """资源所在的部署环境；环境等级会影响策略判断。"""
+
     DEVELOPMENT = "development"
     TEST = "test"
     STAGING = "staging"

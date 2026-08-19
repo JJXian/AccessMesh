@@ -1,3 +1,4 @@
+/** 后端演示身份的只读视图。 */
 export interface DemoUser {
   id: string
   external_id: string
@@ -9,6 +10,7 @@ export interface DemoUser {
   employment_status: string
 }
 
+/** 可申请权限的资源目录项。 */
 export interface Resource {
   id: string
   external_id: string
@@ -21,6 +23,7 @@ export interface Resource {
   enabled: boolean
 }
 
+/** 权限申请及其当前工作流状态。 */
 export interface AccessRequest {
   id: string
   requester_external_id: string

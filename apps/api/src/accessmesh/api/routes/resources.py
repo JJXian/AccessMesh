@@ -1,3 +1,5 @@
+"""权限资源目录查询接口。"""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -17,5 +19,7 @@ async def list_resources(
     _: Annotated[DemoUser, Depends(get_current_demo_user)],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[ResourceRead]:
+    """返回当前身份可浏览的全部启用资源。"""
+
     resources = await session.scalars(select(Resource).where(Resource.enabled.is_(True)))
     return [ResourceRead.model_validate(resource) for resource in resources.all()]

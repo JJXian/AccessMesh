@@ -1,1 +1,1 @@
-"""Background jobs implemented as standalone processes in v0.1."""
+"""后台任务包；v0.1 中的任务以独立进程方式运行。"""

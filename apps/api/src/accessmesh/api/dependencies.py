@@ -1,3 +1,5 @@
+"""FastAPI 路由共享的身份认证、角色校验和配置依赖。"""
+
 from collections.abc import Callable
 from typing import Annotated
 
@@ -15,6 +17,8 @@ async def get_current_demo_user(
     settings: Annotated[Settings, Depends(get_settings)],
     subject_id: Annotated[str | None, Header(alias="X-Demo-Subject-Id")] = None,
 ) -> DemoUser:
+    """从演示请求头解析当前用户；未提供请求头时使用默认身份。"""
+
     if not settings.demo_identity_enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -31,6 +35,8 @@ async def get_current_demo_user(
 
 
 def require_roles(*roles: str) -> Callable[..., DemoUser]:
+    """生成角色守卫依赖，限制路由只能由指定角色访问。"""
+
     async def dependency(
         user: Annotated[DemoUser, Depends(get_current_demo_user)],
     ) -> DemoUser:

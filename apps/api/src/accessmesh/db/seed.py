@@ -1,3 +1,5 @@
+"""开发与演示环境的初始化数据。"""
+
 import asyncio
 
 from sqlalchemy import select
@@ -8,11 +10,14 @@ from accessmesh.domain.enums import Environment, ResourceType, SubjectType
 
 
 async def seed() -> None:
+    """仅在用户表为空时写入演示身份和资源，保证重复启动不会重复造数。"""
+
     async with AsyncSessionLocal() as session:
         existing = await session.scalar(select(DemoUser.id).limit(1))
         if existing is not None:
             return
 
+        # 身份覆盖申请人、审批人、审计员和受限外包人员，便于演示不同权限路径。
         session.add_all(
             [
                 DemoUser(
@@ -49,6 +54,7 @@ async def seed() -> None:
                 ),
             ]
         )
+        # 资源刻意包含测试与生产环境，用于触发不同的 OPA 风险规则。
         session.add_all(
             [
                 Resource(

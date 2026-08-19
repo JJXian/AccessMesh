@@ -1,3 +1,5 @@
+"""仅供本地演示环境切换身份的接口。"""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -14,5 +16,7 @@ router = APIRouter()
 async def list_demo_users(
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[DemoUserRead]:
+    """返回可在前端身份切换器中选择的演示用户。"""
+
     users = await DemoIdentityProvider(session).list_users()
     return [DemoUserRead.model_validate(user) for user in users]

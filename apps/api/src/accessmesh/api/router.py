@@ -1,3 +1,5 @@
+"""汇总并挂载各业务模块的 API 路由。"""
+
 from fastapi import APIRouter
 
 from accessmesh.api.routes import access_requests, demo, health, resources

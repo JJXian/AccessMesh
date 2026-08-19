@@ -1,3 +1,5 @@
+"""应用配置定义及配置实例的缓存入口。"""
+
 from functools import lru_cache
 
 from pydantic import Field
@@ -5,6 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """统一管理可由环境变量覆盖的运行时配置。"""
+
+    # 忽略未声明的环境变量，避免部署环境中的无关配置导致应用启动失败。
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_name: str = "AccessMesh"
@@ -20,4 +25,6 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """返回进程内复用的配置实例，避免重复解析环境变量和 .env 文件。"""
+
     return Settings()

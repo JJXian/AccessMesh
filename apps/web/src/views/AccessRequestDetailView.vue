@@ -8,6 +8,7 @@ import type { AccessRequest } from '../types'
 const route = useRoute()
 const request = ref<AccessRequest>()
 
+// 路由参数始终先归一化为字符串，再交由类型明确的 API 方法处理。
 onMounted(async () => {
   request.value = await getAccessRequest(String(route.params.id))
 })

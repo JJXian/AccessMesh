@@ -1,1 +1,1 @@
-"""API route modules."""
+"""按业务资源拆分的 API 路由模块。"""
