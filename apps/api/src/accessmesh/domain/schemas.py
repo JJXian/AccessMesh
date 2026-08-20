@@ -6,8 +6,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from accessmesh.domain.enums import Environment, RequestStatus, ResourceType, SubjectType
-
+from accessmesh.domain.enums import (
+    Environment,
+    IntentField,
+    RequestStatus,
+    ResourceType,
+    SubjectType,
+)
 
 class HealthRead(BaseModel):
     """健康检查响应。"""
@@ -70,6 +75,32 @@ class AccessRequestRead(BaseModel):
     trace_id: str
     created_at: datetime
     updated_at: datetime
+
+class ParsedIntent(BaseModel):
+    """将自然语言申请解析为后续规划可消费的结构化意图。"""
+
+    task: str | None = Field(default=None, min_length=1, max_length=2000)
+    resource_hints: list[str] = Field(default_factory=list)
+    action_hints: list[str] = Field(default_factory=list)
+    duration_days: int | None = Field(default=None, ge=1, le=365)
+    missing_fields: list[IntentField] = Field(default_factory=list)
+
+
+class CandidateGrant(BaseModel):
+    """规划器提出的候选权限；尚未经过策略、审批或执行。"""
+
+    resource_external_id: str = Field(min_length=3, max_length=160)
+    permission: str = Field(min_length=1, max_length=128)
+    duration_days: int = Field(ge=1, le=365)
+    reason: str = Field(min_length=1, max_length=2000)
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class PlanResult(BaseModel):
+    """一次最小权限规划的结构化结果。"""
+
+    grants: list[CandidateGrant] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
 
 
 class PolicyDecision(BaseModel):

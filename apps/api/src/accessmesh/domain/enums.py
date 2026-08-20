@@ -46,3 +46,11 @@ class Environment(StrEnum):
     TEST = "test"
     STAGING = "staging"
     PRODUCTION = "production"
+
+class IntentField(StrEnum):
+    """自然语言权限申请中必须补充的字段。"""
+
+    TASK = "task"
+    RESOURCE = "resource"
+    ACTION = "action"
+    DURATION = "duration"

@@ -13,6 +13,8 @@ class AccessRequestState(TypedDict, total=False):
     identity_context: dict[str, Any]
     resource_context: dict[str, Any]
     proposed_grants: list[dict[str, Any]]
+    # 规划器生成方案时采用的默认值、未确认信息等说明。
+    plan_assumptions: list[str]
     policy_decision: dict[str, Any]
     risk_findings: list[dict[str, Any]]
     status: str

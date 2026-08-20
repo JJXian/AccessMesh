@@ -4,10 +4,19 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, DateTime, Index, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
-
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from accessmesh.db.base import Base
 from accessmesh.domain.enums import Environment, RequestStatus, ResourceType, SubjectType
 
@@ -103,6 +112,84 @@ class AccessRequest(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, comment="最后更新时间"
+    )
+
+
+class ProposedGrant(Base):
+    """规划器提出的候选权限，尚未经过策略、审批或执行。"""
+
+    __tablename__ = "proposed_grants"
+    __table_args__ = (
+        UniqueConstraint(
+            "request_id",
+            "resource_id",
+            "permission",
+            "plan_version",
+            name="uq_proposed_grant_plan_item",
+        ),
+        CheckConstraint(
+            "duration_days > 0",
+            name="ck_proposed_grants_duration_positive",
+        ),
+        CheckConstraint(
+            "plan_version > 0",
+            name="ck_proposed_grants_plan_version_positive",
+        ),
+        Index("ix_proposed_grants_request_plan", "request_id", "plan_version"),
+        Index("ix_proposed_grants_resource", "resource_id"),
+        {"comment": "权限规划阶段生成的候选授权方案表"},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        comment="候选授权主键",
+    )
+    request_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("access_requests.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="所属权限申请主键",
+    )
+    resource_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("resources.id"),
+        nullable=False,
+        comment="目标资源主键",
+    )
+    permission: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        comment="候选权限名称",
+    )
+    duration_days: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        comment="建议授权期限（天）",
+    )
+    reason: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="建议该权限的业务理由",
+    )
+    evidence_refs: Mapped[list[str]] = mapped_column(
+        JSON,
+        default=list,
+        nullable=False,
+        comment="支撑规划结论的证据引用（JSON）",
+    )
+    plan_version: Mapped[int] = mapped_column(
+        Integer,
+        default=1,
+        nullable=False,
+        comment="权限方案版本号",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+        comment="候选方案生成时间",
     )
 
 
