@@ -59,9 +59,7 @@ class BasicPlanner:
 
             # 找不到一个能满足需求的允许权限时，宁可不生成方案，也不能猜一个权限。
             if permission is None:
-                assumptions.append(
-                    f"资源“{resource.name}”没有可匹配的允许权限，未生成授权建议。"
-                )
+                assumptions.append(f"资源“{resource.name}”没有可匹配的允许权限，未生成授权建议。")
                 continue
 
             grants.append(
@@ -143,7 +141,4 @@ class BasicPlanner:
         """构造可进入审批和审计记录的、可读的推荐理由。"""
 
         task_description = task or "完成当前申请任务"
-        return (
-            f"为完成“{task_description}”，"
-            f"建议在资源“{resource_name}”上授予“{permission}”权限。"
-        )
+        return f"为完成“{task_description}”，建议在资源“{resource_name}”上授予“{permission}”权限。"
