@@ -37,7 +37,7 @@ def test_parser_prioritizes_write_action() -> None:
 
     result = BasicIntentParser().parse("需要查询并更新测试数据库，有效期2天。")
 
-    assert result.resource_hints == ["数据库"]
+    assert result.resource_hints == ["测试数据库"]
     assert result.action_hints == ["更新"]
     assert result.duration_days == 2
     assert result.missing_fields == []

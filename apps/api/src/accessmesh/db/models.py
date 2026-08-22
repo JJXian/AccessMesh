@@ -4,10 +4,9 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -17,6 +16,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.orm import Mapped, mapped_column
+
 from accessmesh.db.base import Base
 from accessmesh.domain.enums import Environment, RequestStatus, ResourceType, SubjectType
 
@@ -190,6 +192,88 @@ class ProposedGrant(Base):
         default=utc_now,
         nullable=False,
         comment="候选方案生成时间",
+    )
+
+
+class PolicyDecisionRecord(Base):
+    """OPA 对单条候选授权方案作出的策略决策记录。"""
+
+    __tablename__ = "policy_decisions"
+    __table_args__ = (
+        # 每一条候选方案在当前设计中只允许有一个最终策略结论。
+        UniqueConstraint(
+            "proposed_grant_id",
+            name="uq_policy_decisions_proposed_grant",
+        ),
+        CheckConstraint(
+            "max_duration_days IS NULL OR max_duration_days > 0",
+            name="ck_policy_decisions_max_duration_positive",
+        ),
+        Index("ix_policy_decisions_request", "request_id"),
+        Index("ix_policy_decisions_allow", "allow"),
+        {"comment": "OPA 策略决策记录表"},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        comment="策略决策主键",
+    )
+    request_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("access_requests.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="所属权限申请主键",
+    )
+    proposed_grant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("proposed_grants.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="关联的候选授权方案主键",
+    )
+    policy_input: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        comment="提交给 OPA 的策略输入快照（JSON）",
+    )
+    allow: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        comment="OPA 是否允许该候选授权方案",
+    )
+    risk_level: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        comment="OPA 评估出的风险等级",
+    )
+    violations: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        default=list,
+        nullable=False,
+        comment="OPA 返回的策略违规原因列表（JSON）",
+    )
+    required_approvals: Mapped[list[str]] = mapped_column(
+        JSON,
+        default=list,
+        nullable=False,
+        comment="OPA 要求的审批角色列表（JSON）",
+    )
+    max_duration_days: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="OPA 允许的最长授权时长（天）",
+    )
+    policy_version: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        comment="命中的 OPA 策略版本",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+        comment="策略决策创建时间",
     )
 
 
