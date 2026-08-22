@@ -20,7 +20,13 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from accessmesh.db.base import Base
-from accessmesh.domain.enums import Environment, RequestStatus, ResourceType, SubjectType
+from accessmesh.domain.enums import (
+    ApprovalDecision,
+    Environment,
+    RequestStatus,
+    ResourceType,
+    SubjectType,
+)
 
 
 def utc_now() -> datetime:
@@ -274,6 +280,61 @@ class PolicyDecisionRecord(Base):
         default=utc_now,
         nullable=False,
         comment="策略决策创建时间",
+    )
+
+
+class Approval(Base):
+    """审批人对权限申请作出的单次最终审批记录。"""
+
+    __tablename__ = "approvals"
+    __table_args__ = (
+        # 当前 MVP 只支持一轮人工审批。
+        # 唯一约束还可避免两个审批人并发提交不同结果。
+        UniqueConstraint(
+            "request_id",
+            name="uq_approvals_request",
+        ),
+        CheckConstraint(
+            "decision IN ('APPROVED', 'REJECTED')",
+            name="ck_approvals_decision",
+        ),
+        Index("ix_approvals_approver", "approver_external_id"),
+        Index("ix_approvals_decision", "decision"),
+        {"comment": "权限申请人工审批记录表"},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        comment="审批记录主键",
+    )
+    request_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("access_requests.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="所属权限申请主键",
+    )
+    approver_external_id: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        comment="审批人外部身份标识",
+    )
+    decision: Mapped[ApprovalDecision] = mapped_column(
+        String(32),
+        nullable=False,
+        comment="审批最终决定",
+    )
+    comment: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="审批意见",
+    )
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+        comment="审批决定时间",
     )
 
 

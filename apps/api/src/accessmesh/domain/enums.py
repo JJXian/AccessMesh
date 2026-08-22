@@ -23,6 +23,13 @@ class RequestStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class ApprovalDecision(StrEnum):
+    """单次人工审批可以作出的最终决定。"""
+
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
 class SubjectType(StrEnum):
     """可接受权限的主体类型。"""
 
@@ -46,6 +53,7 @@ class Environment(StrEnum):
     TEST = "test"
     STAGING = "staging"
     PRODUCTION = "production"
+
 
 class IntentField(StrEnum):
     """自然语言权限申请中必须补充的字段。"""
