@@ -3,8 +3,8 @@
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from accessmesh.api.dependencies import get_current_demo_user
@@ -17,6 +17,7 @@ from accessmesh.db.models import AccessRequest, AuditEvent, DemoUser
 from accessmesh.db.session import get_db
 from accessmesh.domain.schemas import (
     AccessRequestCreate,
+    AccessRequestPageRead,
     AccessRequestRead,
     CandidateGrant,
 )
@@ -160,18 +161,37 @@ async def create_access_request(
     return AccessRequestRead.model_validate(request)
 
 
-@router.get("", response_model=list[AccessRequestRead])
+@router.get("", response_model=AccessRequestPageRead)
 async def list_access_requests(
     current_user: Annotated[DemoUser, Depends(get_current_demo_user)],
     session: Annotated[AsyncSession, Depends(get_db)],
-) -> list[AccessRequestRead]:
-    """按时间倒序查询申请；普通申请人只能看到自己发起的记录。"""
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 10,
+) -> AccessRequestPageRead:
+    """按页查询申请；普通申请人只能查看自己发起的记录。"""
 
-    query = select(AccessRequest).order_by(AccessRequest.created_at.desc())
+    # 先构建基础查询，再同时用于“总数统计”和“当前页数据查询”。
+    base_query = select(AccessRequest)
+
     if current_user.role == "requester":
-        query = query.where(AccessRequest.requester_external_id == current_user.external_id)
+        base_query = base_query.where(
+            AccessRequest.requester_external_id == current_user.external_id
+        )
+
+    # 总数必须在 limit/offset 之前统计，否则无法得到正确页数。
+    total = await session.scalar(select(func.count()).select_from(base_query.subquery()))
+
+    # 第 1 页偏移 0 条；第 2 页偏移 page_size 条，以此类推。
+    offset = (page - 1) * page_size
+    query = base_query.order_by(AccessRequest.created_at.desc()).offset(offset).limit(page_size)
     requests = await session.scalars(query)
-    return [AccessRequestRead.model_validate(item) for item in requests.all()]
+
+    return AccessRequestPageRead(
+        items=[AccessRequestRead.model_validate(request) for request in requests.all()],
+        total=total or 0,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/{request_id}", response_model=AccessRequestRead)

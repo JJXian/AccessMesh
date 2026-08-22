@@ -35,3 +35,23 @@ export interface AccessRequest {
   created_at: string
   updated_at: string
 }
+/** 分页返回的权限申请记录。 */
+export interface AccessRequestPage {
+  items: AccessRequest[]
+  total: number
+  page: number
+  page_size: number
+}
+
+/** 审批人可以作出的最终决定。 */
+export type ApprovalDecision = 'APPROVED' | 'REJECTED'
+
+/** 后端成功保存后返回的审批记录。 */
+export interface Approval {
+  id: string
+  request_id: string
+  approver_external_id: string
+  decision: ApprovalDecision
+  comment: string | null
+  decided_at: string
+}

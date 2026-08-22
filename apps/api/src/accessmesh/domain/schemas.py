@@ -7,12 +7,14 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from accessmesh.domain.enums import (
+    ApprovalDecision,
     Environment,
     IntentField,
     RequestStatus,
     ResourceType,
     SubjectType,
 )
+
 
 class HealthRead(BaseModel):
     """健康检查响应。"""
@@ -75,6 +77,40 @@ class AccessRequestRead(BaseModel):
     trace_id: str
     created_at: datetime
     updated_at: datetime
+
+
+class AccessRequestPageRead(BaseModel):
+    """分页查询权限申请时的响应结构。"""
+
+    items: list[AccessRequestRead]
+    total: int = Field(ge=0)
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1)
+
+
+class ApprovalCreate(BaseModel):
+    """审批人提交审批决定时的请求体。"""
+
+    decision: ApprovalDecision
+    comment: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="审批意见；拒绝申请时必须填写。",
+    )
+
+
+class ApprovalRead(BaseModel):
+    """对外展示的审批记录。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    request_id: UUID
+    approver_external_id: str
+    decision: ApprovalDecision
+    comment: str | None
+    decided_at: datetime
+
 
 class ParsedIntent(BaseModel):
     """将自然语言申请解析为后续规划可消费的结构化意图。"""
