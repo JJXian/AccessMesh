@@ -8,14 +8,17 @@ class AccessRequestState(TypedDict, total=False):
 
     request_id: str
     trace_id: str
+    # 最终被授予权限的主体外部标识。
+    subject_external_id: str
     raw_request: str
     parsed_intent: dict[str, Any]
     identity_context: dict[str, Any]
     resource_context: dict[str, Any]
     proposed_grants: list[dict[str, Any]]
+    # 每条候选授权方案对应的一条 OPA 决策结果。
+    policy_decisions: list[dict[str, Any]]
     # 规划器生成方案时采用的默认值、未确认信息等说明。
     plan_assumptions: list[str]
-    policy_decision: dict[str, Any]
     risk_findings: list[dict[str, Any]]
     status: str
     errors: list[dict[str, Any]]

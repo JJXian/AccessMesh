@@ -8,10 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from accessmesh.api.dependencies import get_current_demo_user
-from accessmesh.context.resource_context import ResourceContextLoader
+from accessmesh.config import get_settings
+from accessmesh.context.resource_context import (
+    ResourceContextLoader,
+    SubjectNotFoundError,
+)
 from accessmesh.db.models import AccessRequest, AuditEvent, DemoUser
 from accessmesh.db.session import get_db
-from accessmesh.domain.enums import RequestStatus
 from accessmesh.domain.schemas import (
     AccessRequestCreate,
     AccessRequestRead,
@@ -19,6 +22,12 @@ from accessmesh.domain.schemas import (
 )
 from accessmesh.graph.workflow import build_access_request_graph
 from accessmesh.planning.persistence import persist_proposed_grants
+from accessmesh.policy.client import OpaPolicyClient, PolicyUnavailableError
+from accessmesh.policy.evaluator import OpaPolicyEvaluator
+from accessmesh.policy.persistence import (
+    persist_policy_decisions,
+    resolve_request_status,
+)
 
 router = APIRouter()
 
@@ -29,7 +38,7 @@ async def create_access_request(
     current_user: Annotated[DemoUser, Depends(get_current_demo_user)],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> AccessRequestRead:
-    """创建申请、生成候选方案，并在同一事务中记录审计事件。"""
+    """创建申请，完成规划、OPA 策略判断与审计记录。"""
 
     # “申请人 + 客户端请求号”构成幂等边界，前端重试不会创建重复申请。
     existing = await session.scalar(
@@ -51,8 +60,7 @@ async def create_access_request(
     )
     session.add(request)
 
-    # flush 会发送 INSERT，但不会提交事务。
-    # 它的目的只是获取 request.id，供审计事件和候选方案关联。
+    # 此时写入申请单但还不提交，用于取得 request.id。
     await session.flush()
 
     session.add(
@@ -65,20 +73,38 @@ async def create_access_request(
         )
     )
 
-    # 将当前请求使用的数据库会话注入工作流。
-    # 工作流因此能查询真实 resources 表，但不会自行创建新事务。
     context_loader = ResourceContextLoader(session)
-    graph = build_access_request_graph(context_loader=context_loader.load)
-    workflow_result = await graph.ainvoke(
-        {
-            "request_id": str(request.id),
-            "trace_id": trace_id,
-            "raw_request": payload.request_text,
-        }
+    policy_client = OpaPolicyClient(get_settings())
+    policy_evaluator = OpaPolicyEvaluator(policy_client)
+    graph = build_access_request_graph(
+        context_loader=context_loader.load,
+        policy_evaluator=policy_evaluator.evaluate,
     )
 
-    # LangGraph 状态中的候选方案是普通字典；
-    # 保存前重新校验为 CandidateGrant，确保数据满足领域约束。
+    try:
+        workflow_result = await graph.ainvoke(
+            {
+                "request_id": str(request.id),
+                "trace_id": trace_id,
+                "raw_request": payload.request_text,
+                "subject_external_id": payload.subject_external_id,
+            }
+        )
+    except SubjectNotFoundError as exc:
+        # 未提交事务前主动回滚，避免留下没有主体的半成品申请。
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except PolicyUnavailableError as exc:
+        # OPA 不可用时默认不放行，也不进入审批。
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="策略服务暂不可用，请稍后重试。",
+        ) from exc
+
     candidate_grants = [
         CandidateGrant.model_validate(grant) for grant in workflow_result["proposed_grants"]
     ]
@@ -87,9 +113,17 @@ async def create_access_request(
         request_id=request.id,
         grants=candidate_grants,
     )
+    persisted_decisions = await persist_policy_decisions(
+        session=session,
+        request_id=request.id,
+        raw_decisions=workflow_result["policy_decisions"],
+    )
 
-    # 当前工作流在“规划完成”后停止，下一阶段才进入 OPA 策略判断。
-    request.status = RequestStatus.PLANNING
+    # 根据候选方案和 OPA 决策，决定申请应进入哪个下一状态。
+    request.status = resolve_request_status(
+        grant_count=len(persisted_grants),
+        policy_decisions=persisted_decisions,
+    )
 
     session.add(
         AuditEvent(
@@ -104,8 +138,22 @@ async def create_access_request(
             },
         )
     )
+    session.add(
+        AuditEvent(
+            request_id=request.id,
+            trace_id=trace_id,
+            event_type="ACCESS_POLICY_EVALUATED",
+            actor_external_id="opa",
+            payload={
+                "decision_count": len(persisted_decisions),
+                "allowed_count": sum(decision.allow for decision in persisted_decisions),
+                "denied_count": sum(not decision.allow for decision in persisted_decisions),
+                "request_status": request.status,
+            },
+        )
+    )
 
-    # 到这里才一次性提交：申请单、候选方案和两条审计事件要么全部成功，要么全部失败。
+    # 申请、候选方案、策略决策、审计事件在同一事务中一次性提交。
     await session.commit()
     await session.refresh(request)
 

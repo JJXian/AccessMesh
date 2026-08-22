@@ -81,6 +81,65 @@ async def test_graph_returns_empty_plan_when_context_has_no_resource() -> None:
 
     assert result["status"] == "PLAN_READY"
     assert result["proposed_grants"] == []
-    assert result["plan_assumptions"] == [
-        "资源目录中未找到与申请匹配的目标资源。"
-    ]
+    assert result["plan_assumptions"] == ["资源目录中未找到与申请匹配的目标资源。"]
+
+
+@pytest.mark.asyncio
+async def test_graph_runs_configured_policy_evaluator() -> None:
+    """配置策略评估器后，工作流应在规划完成后继续执行策略节点。"""
+
+    evaluated_states: list[dict] = []
+
+    async def fake_policy_evaluator(state: dict) -> dict:
+        """模拟策略评估器，记录它接收到的规划结果。"""
+
+        evaluated_states.append(state)
+        return {
+            "policy_decisions": [
+                {
+                    "resource_external_id": "database:payment-test",
+                    "permission": "read_only",
+                    "allow": True,
+                }
+            ],
+            "status": "POLICY_EVALUATED",
+        }
+
+    graph = build_access_request_graph(
+        policy_evaluator=fake_policy_evaluator,
+    )
+    result = await graph.ainvoke(
+        {
+            "raw_request": "申请支付测试数据库查询权限，有效期3天。",
+            "identity_context": {
+                "subject": {
+                    "subject_type": "employee",
+                    "employment_status": "active",
+                }
+            },
+            "resource_context": {
+                "resources": [
+                    {
+                        "id": "11111111-1111-1111-1111-111111111111",
+                        "external_id": "database:payment-test",
+                        "name": "支付测试数据库",
+                        "resource_type": "database",
+                        "environment": "test",
+                        "sensitivity": "L2",
+                        "owner_external_id": "user-approver",
+                        "allowed_permissions": [
+                            "connect",
+                            "read_only",
+                            "read_write",
+                        ],
+                        "enabled": True,
+                    }
+                ]
+            },
+        }
+    )
+
+    assert result["status"] == "POLICY_EVALUATED"
+    assert result["policy_decisions"][0]["allow"] is True
+    assert len(evaluated_states) == 1
+    assert evaluated_states[0]["proposed_grants"][0]["permission"] == "read_only"

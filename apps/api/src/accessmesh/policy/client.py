@@ -24,7 +24,11 @@ class OpaPolicyClient:
 
         # 支持注入共享客户端；未注入时由本方法创建并负责关闭临时客户端。
         owns_client = self._client is None
-        client = self._client or httpx.AsyncClient(timeout=3.0)
+        # OPA 是本机或 Docker 内网服务，不应读取系统 SOCKS/HTTP 代理配置。
+        client = self._client or httpx.AsyncClient(
+            timeout=3.0,
+            trust_env=False,
+        )
         try:
             response = await client.post(
                 f"{self._settings.opa_url}{self._settings.opa_decision_path}",
