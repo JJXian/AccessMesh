@@ -69,3 +69,22 @@ export interface PermissionInstance {
   expires_at: string
   revoked_at: string | null
 }
+
+/** 权限治理链路中不可修改的单条审计事件。 */
+export interface AuditEvent {
+  id: string
+  request_id: string | null
+  trace_id: string
+  event_type: string
+  actor_external_id: string
+  payload: Record<string, unknown>
+  created_at: string
+}
+
+/** 分页返回的审计事件。 */
+export interface AuditEventPage {
+  items: AuditEvent[]
+  total: number
+  page: number
+  page_size: number
+}

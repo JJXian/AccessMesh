@@ -1,11 +1,12 @@
 import client from './client'
 import type {
-  PermissionInstance,
   AccessRequest,
   AccessRequestPage,
   Approval,
   ApprovalDecision,
+  AuditEventPage,
   DemoUser,
+  PermissionInstance,
   Resource,
 } from '../types'
 
@@ -78,6 +79,21 @@ export async function createApproval(
 /** 获取当前身份有权限查看的已生效权限。 */
 export async function listActivePermissions(): Promise<PermissionInstance[]> {
   const { data } = await client.get<PermissionInstance[]>('/permissions')
+  return data
+}
+
+/** 按页查询当前身份可见的审计事件。 */
+export async function listAuditEvents(params: {
+  page: number
+  page_size: number
+  request_id?: string
+  subject_external_id?: string
+  resource_external_id?: string
+  event_type?: string
+}): Promise<AuditEventPage> {
+  const { data } = await client.get<AuditEventPage>('/audit-events', {
+    params,
+  })
   return data
 }
 
