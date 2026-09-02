@@ -11,7 +11,10 @@ def test_parser_extracts_frontend_demo_request() -> None:
         "我需要支付项目GitLab只读权限和测试数据库查询权限，有效期30天，用于排查对账问题。"
     )
 
-    assert result.task == "我需要支付项目GitLab只读权限和测试数据库查询权限，有效期30天，用于排查对账问题。"
+    assert (
+        result.task
+        == "我需要支付项目GitLab只读权限和测试数据库查询权限，有效期30天，用于排查对账问题。"
+    )
     assert result.resource_hints == ["GitLab", "测试数据库"]
     assert result.action_hints == ["查询"]
     assert result.duration_days == 30
@@ -41,6 +44,7 @@ def test_parser_prioritizes_write_action() -> None:
     assert result.action_hints == ["更新"]
     assert result.duration_days == 2
     assert result.missing_fields == []
+
 
 def test_parser_distinguishes_production_database() -> None:
     """生产数据库申请不能被错误识别为测试数据库。"""

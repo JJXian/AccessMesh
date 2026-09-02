@@ -9,7 +9,6 @@ import re
 from accessmesh.domain.enums import IntentField
 from accessmesh.domain.schemas import ParsedIntent
 
-
 # 代码仓库资源提示规则。
 GITLAB_KEYWORDS = ("gitlab", "代码仓库", "仓库")
 
@@ -73,10 +72,7 @@ class BasicIntentParser:
         # 使用 if / elif，避免“测试数据库”同时又被识别成泛化的“数据库”。
         if any(keyword in normalized_text for keyword in TEST_DATABASE_KEYWORDS):
             resource_hints.append("测试数据库")
-        elif any(
-                keyword in normalized_text
-                for keyword in PRODUCTION_DATABASE_KEYWORDS
-        ):
+        elif any(keyword in normalized_text for keyword in PRODUCTION_DATABASE_KEYWORDS):
             resource_hints.append("生产数据库")
         elif any(keyword in normalized_text for keyword in GENERIC_DATABASE_KEYWORDS):
             resource_hints.append("数据库")
