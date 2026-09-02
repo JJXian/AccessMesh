@@ -55,3 +55,17 @@ export interface Approval {
   comment: string | null
   decided_at: string
 }
+
+/** 后端返回的已生效权限实例。 */
+export interface PermissionInstance {
+  id: string
+  request_id: string
+  subject_external_id: string
+  resource_external_id: string
+  resource_name: string
+  permission: string
+  status: 'ACTIVE' | 'REVOKED'
+  granted_at: string
+  expires_at: string
+  revoked_at: string | null
+}

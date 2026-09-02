@@ -30,6 +30,23 @@ class ApprovalDecision(StrEnum):
     REJECTED = "REJECTED"
 
 
+class ExecutionTaskStatus(StrEnum):
+    """单项权限执行任务的生命周期状态。"""
+
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    COMPENSATED = "COMPENSATED"
+
+
+class PermissionStatus(StrEnum):
+    """已生效权限实例的生命周期状态。"""
+
+    ACTIVE = "ACTIVE"
+    REVOKED = "REVOKED"
+
+
 class SubjectType(StrEnum):
     """可接受权限的主体类型。"""
 

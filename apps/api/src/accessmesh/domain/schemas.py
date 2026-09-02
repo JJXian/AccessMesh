@@ -10,6 +10,7 @@ from accessmesh.domain.enums import (
     ApprovalDecision,
     Environment,
     IntentField,
+    PermissionStatus,
     RequestStatus,
     ResourceType,
     SubjectType,
@@ -110,6 +111,35 @@ class ApprovalRead(BaseModel):
     decision: ApprovalDecision
     comment: str | None
     decided_at: datetime
+
+
+class PermissionInstanceRead(BaseModel):
+    """对外展示当前已生效权限实例的读取模型。"""
+
+    id: UUID
+    request_id: UUID
+    subject_external_id: str
+    resource_external_id: str
+    resource_name: str
+    permission: str
+    status: PermissionStatus
+    granted_at: datetime
+    expires_at: datetime
+    revoked_at: datetime | None
+
+
+class AuditEventRead(BaseModel):
+    """对外展示权限治理链路中的单条审计事件。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    request_id: UUID | None
+    trace_id: str
+    event_type: str
+    actor_external_id: str
+    payload: dict[str, Any]
+    created_at: datetime
 
 
 class ParsedIntent(BaseModel):

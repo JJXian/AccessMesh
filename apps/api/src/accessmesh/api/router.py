@@ -2,7 +2,15 @@
 
 from fastapi import APIRouter
 
-from accessmesh.api.routes import access_requests, approvals, demo, health, resources
+from accessmesh.api.routes import (
+    access_requests,
+    approvals,
+    audit,
+    demo,
+    health,
+    permissions,
+    resources,
+)
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
@@ -17,4 +25,14 @@ api_router.include_router(
     approvals.router,
     prefix="/approvals",
     tags=["approvals"],
+)
+api_router.include_router(
+    permissions.router,
+    prefix="/permissions",
+    tags=["permissions"],
+)
+api_router.include_router(
+    audit.router,
+    prefix="/audit-events",
+    tags=["audit-events"],
 )

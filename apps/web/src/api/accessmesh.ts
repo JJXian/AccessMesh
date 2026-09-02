@@ -1,5 +1,6 @@
 import client from './client'
 import type {
+  PermissionInstance,
   AccessRequest,
   AccessRequestPage,
   Approval,
@@ -70,6 +71,22 @@ export async function createApproval(
   const { data } = await client.post<Approval>(
     `/approvals/${requestId}`,
     payload,
+  )
+  return data
+}
+
+/** 获取当前身份有权限查看的已生效权限。 */
+export async function listActivePermissions(): Promise<PermissionInstance[]> {
+  const { data } = await client.get<PermissionInstance[]>('/permissions')
+  return data
+}
+
+/** 执行一条已经审批通过的权限申请。 */
+export async function executeAccessRequest(
+  requestId: string,
+): Promise<AccessRequest> {
+  const { data } = await client.post<AccessRequest>(
+    `/access-requests/${requestId}/execute`,
   )
   return data
 }

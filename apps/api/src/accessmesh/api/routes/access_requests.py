@@ -7,7 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from accessmesh.api.dependencies import get_current_demo_user
+from accessmesh.api.dependencies import (
+    get_current_demo_user,
+    require_roles,
+)
 from accessmesh.config import get_settings
 from accessmesh.context.resource_context import (
     ResourceContextLoader,
@@ -20,6 +23,11 @@ from accessmesh.domain.schemas import (
     AccessRequestPageRead,
     AccessRequestRead,
     CandidateGrant,
+)
+from accessmesh.execution.service import (
+    ExecutionConflictError,
+    ExecutionNotFoundError,
+    execute_approved_request,
 )
 from accessmesh.graph.workflow import build_access_request_graph
 from accessmesh.planning.persistence import persist_proposed_grants
@@ -158,6 +166,44 @@ async def create_access_request(
     await session.commit()
     await session.refresh(request)
 
+    return AccessRequestRead.model_validate(request)
+
+
+@router.post(
+    "/{request_id}/execute",
+    response_model=AccessRequestRead,
+)
+async def execute_access_request(
+    request_id: UUID,
+    current_approver: Annotated[
+        DemoUser,
+        Depends(require_roles("approver")),
+    ],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> AccessRequestRead:
+    """执行已审批通过的权限申请。"""
+
+    try:
+        request = await execute_approved_request(
+            session=session,
+            request_id=request_id,
+            actor_external_id=current_approver.external_id,
+        )
+        await session.commit()
+    except ExecutionNotFoundError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except ExecutionConflictError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    await session.refresh(request)
     return AccessRequestRead.model_validate(request)
 
 

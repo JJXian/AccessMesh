@@ -23,6 +23,8 @@ from accessmesh.db.base import Base
 from accessmesh.domain.enums import (
     ApprovalDecision,
     Environment,
+    ExecutionTaskStatus,
+    PermissionStatus,
     RequestStatus,
     ResourceType,
     SubjectType,
@@ -335,6 +337,187 @@ class Approval(Base):
         default=utc_now,
         nullable=False,
         comment="审批决定时间",
+    )
+
+
+class ExecutionTask(Base):
+    """对单条候选授权方案执行授予、验证或补偿的任务记录。"""
+
+    __tablename__ = "execution_tasks"
+    __table_args__ = (
+        # 同一条候选方案只允许创建一个执行任务，保证执行幂等。
+        UniqueConstraint(
+            "proposed_grant_id",
+            name="uq_execution_tasks_proposed_grant",
+        ),
+        UniqueConstraint(
+            "idempotency_key",
+            name="uq_execution_tasks_idempotency_key",
+        ),
+        CheckConstraint(
+            "attempt_count >= 0",
+            name="ck_execution_tasks_attempt_count_nonnegative",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'COMPENSATED')",
+            name="ck_execution_tasks_status",
+        ),
+        Index("ix_execution_tasks_request_status", "request_id", "status"),
+        {"comment": "权限授予执行任务表"},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        comment="执行任务主键",
+    )
+    request_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("access_requests.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="所属权限申请主键",
+    )
+    proposed_grant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("proposed_grants.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="关联的候选授权方案主键",
+    )
+    status: Mapped[ExecutionTaskStatus] = mapped_column(
+        String(32),
+        default=ExecutionTaskStatus.PENDING,
+        nullable=False,
+        comment="执行任务当前状态",
+    )
+    idempotency_key: Mapped[str] = mapped_column(
+        String(160),
+        nullable=False,
+        comment="调用外部资源适配器的幂等键",
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="已执行尝试次数",
+    )
+    result: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        default=dict,
+        nullable=False,
+        comment="外部资源适配器返回结果（JSON）",
+    )
+    error_message: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="最近一次执行失败原因",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+        comment="执行任务创建时间",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+        comment="执行任务最后更新时间",
+    )
+
+
+class PermissionInstance(Base):
+    """已在目标系统实际生效、后续需要回收的权限实例。"""
+
+    __tablename__ = "permission_instances"
+    __table_args__ = (
+        # 一项成功执行的任务只能产生一条权限实例。
+        UniqueConstraint(
+            "execution_task_id",
+            name="uq_permission_instances_execution_task",
+        ),
+        CheckConstraint(
+            "status IN ('ACTIVE', 'REVOKED')",
+            name="ck_permission_instances_status",
+        ),
+        CheckConstraint(
+            "expires_at > granted_at",
+            name="ck_permission_instances_expiry_after_grant",
+        ),
+        CheckConstraint(
+            "revoked_at IS NULL OR revoked_at >= granted_at",
+            name="ck_permission_instances_revoked_after_grant",
+        ),
+        Index("ix_permission_instances_subject_status", "subject_external_id", "status"),
+        Index("ix_permission_instances_expiry_status", "expires_at", "status"),
+        {"comment": "已生效权限实例表"},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        comment="权限实例主键",
+    )
+    request_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("access_requests.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="来源权限申请主键",
+    )
+    execution_task_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("execution_tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="来源执行任务主键",
+    )
+    subject_external_id: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        comment="实际获得权限的主体外部标识",
+    )
+    resource_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("resources.id"),
+        nullable=False,
+        comment="目标资源主键",
+    )
+    permission: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        comment="已生效权限名称",
+    )
+    status: Mapped[PermissionStatus] = mapped_column(
+        String(32),
+        default=PermissionStatus.ACTIVE,
+        nullable=False,
+        comment="权限实例当前状态",
+    )
+    external_grant_id: Mapped[str] = mapped_column(
+        String(160),
+        nullable=False,
+        comment="外部资源系统返回的授权操作标识",
+    )
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        comment="权限实际生效时间",
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        comment="权限到期时间",
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="权限撤销时间",
+    )
+    revocation_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="撤销原因",
     )
 
 
