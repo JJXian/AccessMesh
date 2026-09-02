@@ -142,6 +142,15 @@ class AuditEventRead(BaseModel):
     created_at: datetime
 
 
+class AuditEventPageRead(BaseModel):
+    """分页查询审计事件时的响应结构。"""
+
+    items: list[AuditEventRead]
+    total: int = Field(ge=0)
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1)
+
+
 class ParsedIntent(BaseModel):
     """将自然语言申请解析为后续规划可消费的结构化意图。"""
 
