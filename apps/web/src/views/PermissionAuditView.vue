@@ -13,6 +13,12 @@ import type {
   PermissionInstance,
   Resource,
 } from '../types'
+import {
+  auditEventOptions,
+  formatAuditEventType,
+  formatSystemActor,
+  getAuditEventTagType,
+} from '../utils/auditEvent'
 import { formatDateTime } from '../utils/dateTime'
 
 const identity = useIdentityStore()
@@ -35,19 +41,7 @@ const filters = reactive({
   eventType: '',
 })
 
-const eventOptions = [
-  { value: 'ACCESS_REQUEST_CREATED', label: '申请已创建' },
-  { value: 'ACCESS_PLAN_CREATED', label: '权限方案已生成' },
-  { value: 'ACCESS_POLICY_EVALUATED', label: '策略评估完成' },
-  { value: 'ACCESS_REQUEST_APPROVED', label: '审批已通过' },
-  { value: 'ACCESS_REQUEST_REJECTED', label: '审批已拒绝' },
-  { value: 'ACCESS_EXECUTION_STARTED', label: '授权执行开始' },
-  { value: 'ACCESS_EXECUTION_COMPLETED', label: '授权执行完成' },
-  { value: 'ACCESS_EXECUTION_FAILED', label: '授权执行失败' },
-  { value: 'ACCESS_PERMISSION_REVOKED', label: '到期权限已回收' },
-  { value: 'ACCESS_REQUEST_REVOKED', label: '申请权限已全部回收' },
-  { value: 'ACCESS_REVOCATION_FAILED', label: '到期权限回收失败' },
-]
+const eventOptions = auditEventOptions
 
 /** 加载当前身份可见的有效权限。 */
 async function loadPermissions() {
@@ -131,33 +125,19 @@ function formatSubject(externalId: string): string {
 
 /** 将系统组件标识和用户标识转换成更容易理解的中文名称。 */
 function formatActor(externalId: string): string {
-  const systemActors: Record<string, string> = {
-    'accessmesh-planner': '权限规划器',
-    'accessmesh-expiry-scanner': '到期回收任务',
-    opa: 'OPA 策略引擎',
-  }
-  return systemActors[externalId] ?? formatSubject(externalId)
+  return formatSystemActor(externalId) ?? formatSubject(externalId)
 }
 
 /** 将事件类型转换为中文业务动作。 */
 function formatEventType(eventType: string): string {
-  return eventOptions.find((item) => item.value === eventType)?.label ?? eventType
+  return formatAuditEventType(eventType)
 }
 
 /** 用颜色区分正常、等待和失败事件。 */
 function eventTagType(
   eventType: string,
 ): 'success' | 'warning' | 'danger' | 'primary' | 'info' {
-  if (eventType.endsWith('COMPLETED') || eventType.endsWith('APPROVED')) {
-    return 'success'
-  }
-  if (eventType.endsWith('FAILED') || eventType.endsWith('REJECTED')) {
-    return 'danger'
-  }
-  if (eventType.includes('POLICY') || eventType.endsWith('STARTED')) {
-    return 'warning'
-  }
-  return eventType.endsWith('CREATED') ? 'primary' : 'info'
+  return getAuditEventTagType(eventType)
 }
 
 /** 缩短表格中的申请编号，完整编号仍可在详情中查看。 */
