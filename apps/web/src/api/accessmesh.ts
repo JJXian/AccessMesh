@@ -1,6 +1,7 @@
 import client from './client'
 import type {
   AccessRequest,
+  AccessRequestDetail,
   AccessRequestPage,
   Approval,
   ApprovalDecision,
@@ -42,6 +43,16 @@ export async function listAccessRequests(
 /** 根据申请主键读取详情。 */
 export async function getAccessRequest(id: string): Promise<AccessRequest> {
   const { data } = await client.get<AccessRequest>(`/access-requests/${id}`)
+  return data
+}
+
+/** 获取申请从规划、审批、执行到审计的聚合详情。 */
+export async function getAccessRequestDetail(
+  id: string,
+): Promise<AccessRequestDetail> {
+  const { data } = await client.get<AccessRequestDetail>(
+    `/access-requests/${id}/detail`,
+  )
   return data
 }
 

@@ -74,3 +74,46 @@ body { margin: 0; min-width: 1100px; background: #f4f6fa; }
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+.request-detail-page {
+  min-height: 420px;
+}
+
+.detail-expand {
+  padding: 12px 28px 20px;
+}
+
+.detail-expand p {
+  margin: 8px 0;
+  color: #566178;
+}
+
+.detail-expand .audit-payload {
+  margin-top: 14px;
+}
+
+.request-audit-timeline {
+  padding: 10px 20px 0;
+}
+
+.timeline-event {
+  padding: 14px 16px 6px;
+  border: 1px solid #e7ebf2;
+  border-radius: 8px;
+  background: #fafbfe;
+}
+
+.timeline-event .card-header > span {
+  color: #687289;
+  font-size: 13px;
+}
+
+.timeline-event .el-collapse {
+  margin-top: 8px;
+  border: 0;
+}
+
+.timeline-event .el-collapse-item__header,
+.timeline-event .el-collapse-item__wrap {
+  background: transparent;
+}

@@ -88,3 +88,70 @@ export interface AuditEventPage {
   page: number
   page_size: number
 }
+
+/** 申请详情中的候选授权方案和资源信息。 */
+export interface ProposedGrantDetail {
+  id: string
+  resource_external_id: string
+  resource_name: string
+  resource_type: string
+  environment: string
+  sensitivity: string
+  permission: string
+  duration_days: number
+  reason: string
+  evidence_refs: string[]
+  plan_version: number
+  created_at: string
+}
+
+/** OPA 针对单条候选授权方案给出的决策。 */
+export interface PolicyDecisionDetail {
+  id: string
+  proposed_grant_id: string
+  allow: boolean
+  risk_level: string
+  violations: Record<string, unknown>[]
+  required_approvals: string[]
+  max_duration_days: number | null
+  policy_version: string
+  created_at: string
+}
+
+/** 调用资源适配器执行单项授权的结果。 */
+export interface ExecutionTask {
+  id: string
+  proposed_grant_id: string
+  status: string
+  attempt_count: number
+  result: Record<string, unknown>
+  error_message: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** 已授权权限从生效到回收的生命周期记录。 */
+export interface PermissionLifecycle {
+  id: string
+  execution_task_id: string
+  resource_external_id: string
+  resource_name: string
+  permission: string
+  status: 'ACTIVE' | 'REVOKED'
+  external_grant_id: string
+  granted_at: string
+  expires_at: string
+  revoked_at: string | null
+  revocation_reason: string | null
+}
+
+/** 一条权限申请从规划、审批、执行到审计的聚合详情。 */
+export interface AccessRequestDetail {
+  request: AccessRequest
+  proposed_grants: ProposedGrantDetail[]
+  policy_decisions: PolicyDecisionDetail[]
+  approval: Approval | null
+  execution_tasks: ExecutionTask[]
+  permissions: PermissionLifecycle[]
+  audit_events: AuditEvent[]
+}
