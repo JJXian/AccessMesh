@@ -44,6 +44,9 @@ const eventOptions = [
   { value: 'ACCESS_EXECUTION_STARTED', label: '授权执行开始' },
   { value: 'ACCESS_EXECUTION_COMPLETED', label: '授权执行完成' },
   { value: 'ACCESS_EXECUTION_FAILED', label: '授权执行失败' },
+  { value: 'ACCESS_PERMISSION_REVOKED', label: '到期权限已回收' },
+  { value: 'ACCESS_REQUEST_REVOKED', label: '申请权限已全部回收' },
+  { value: 'ACCESS_REVOCATION_FAILED', label: '到期权限回收失败' },
 ]
 
 /** 加载当前身份可见的有效权限。 */
@@ -130,6 +133,7 @@ function formatSubject(externalId: string): string {
 function formatActor(externalId: string): string {
   const systemActors: Record<string, string> = {
     'accessmesh-planner': '权限规划器',
+    'accessmesh-expiry-scanner': '到期回收任务',
     opa: 'OPA 策略引擎',
   }
   return systemActors[externalId] ?? formatSubject(externalId)
