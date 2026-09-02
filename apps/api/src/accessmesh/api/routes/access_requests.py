@@ -16,13 +16,30 @@ from accessmesh.context.resource_context import (
     ResourceContextLoader,
     SubjectNotFoundError,
 )
-from accessmesh.db.models import AccessRequest, AuditEvent, DemoUser
+from accessmesh.db.models import (
+    AccessRequest,
+    Approval,
+    AuditEvent,
+    DemoUser,
+    ExecutionTask,
+    PermissionInstance,
+    PolicyDecisionRecord,
+    ProposedGrant,
+    Resource,
+)
 from accessmesh.db.session import get_db
 from accessmesh.domain.schemas import (
     AccessRequestCreate,
+    AccessRequestDetailRead,
     AccessRequestPageRead,
     AccessRequestRead,
+    ApprovalRead,
+    AuditEventRead,
     CandidateGrant,
+    ExecutionTaskRead,
+    PermissionLifecycleRead,
+    PolicyDecisionDetailRead,
+    ProposedGrantDetailRead,
 )
 from accessmesh.execution.service import (
     ExecutionConflictError,
@@ -258,3 +275,107 @@ async def get_access_request(
     if requester_cannot_view:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="request not visible")
     return AccessRequestRead.model_validate(request)
+
+
+@router.get("/{request_id}/detail", response_model=AccessRequestDetailRead)
+async def get_access_request_detail(
+    request_id: UUID,
+    current_user: Annotated[DemoUser, Depends(get_current_demo_user)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> AccessRequestDetailRead:
+    """聚合查询申请从权限规划到回收的完整处理链路。"""
+
+    request = await session.get(AccessRequest, request_id)
+    if request is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="request not found",
+        )
+
+    requester_cannot_view = (
+        current_user.role == "requester"
+        and request.requester_external_id != current_user.external_id
+    )
+    if requester_cannot_view:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="request not visible",
+        )
+
+    # 候选方案需要同时读取资源目录，前端才能显示中文资源名称和环境。
+    grant_result = await session.execute(
+        select(ProposedGrant, Resource)
+        .join(Resource, Resource.id == ProposedGrant.resource_id)
+        .where(ProposedGrant.request_id == request.id)
+        .order_by(ProposedGrant.plan_version, ProposedGrant.created_at)
+    )
+    grants = [
+        ProposedGrantDetailRead(
+            id=grant.id,
+            resource_external_id=resource.external_id,
+            resource_name=resource.name,
+            resource_type=resource.resource_type,
+            environment=resource.environment,
+            sensitivity=resource.sensitivity,
+            permission=grant.permission,
+            duration_days=grant.duration_days,
+            reason=grant.reason,
+            evidence_refs=grant.evidence_refs,
+            plan_version=grant.plan_version,
+            created_at=grant.created_at,
+        )
+        for grant, resource in grant_result.all()
+    ]
+
+    decision_result = await session.scalars(
+        select(PolicyDecisionRecord)
+        .where(PolicyDecisionRecord.request_id == request.id)
+        .order_by(PolicyDecisionRecord.created_at)
+    )
+    approval = await session.scalar(select(Approval).where(Approval.request_id == request.id))
+    task_result = await session.scalars(
+        select(ExecutionTask)
+        .where(ExecutionTask.request_id == request.id)
+        .order_by(ExecutionTask.created_at)
+    )
+
+    permission_result = await session.execute(
+        select(PermissionInstance, Resource)
+        .join(Resource, Resource.id == PermissionInstance.resource_id)
+        .where(PermissionInstance.request_id == request.id)
+        .order_by(PermissionInstance.granted_at)
+    )
+    permissions = [
+        PermissionLifecycleRead(
+            id=permission.id,
+            execution_task_id=permission.execution_task_id,
+            resource_external_id=resource.external_id,
+            resource_name=resource.name,
+            permission=permission.permission,
+            status=permission.status,
+            external_grant_id=permission.external_grant_id,
+            granted_at=permission.granted_at,
+            expires_at=permission.expires_at,
+            revoked_at=permission.revoked_at,
+            revocation_reason=permission.revocation_reason,
+        )
+        for permission, resource in permission_result.all()
+    ]
+
+    audit_result = await session.scalars(
+        select(AuditEvent)
+        .where(AuditEvent.request_id == request.id)
+        .order_by(AuditEvent.created_at)
+    )
+
+    return AccessRequestDetailRead(
+        request=AccessRequestRead.model_validate(request),
+        proposed_grants=grants,
+        policy_decisions=[
+            PolicyDecisionDetailRead.model_validate(decision) for decision in decision_result.all()
+        ],
+        approval=ApprovalRead.model_validate(approval) if approval else None,
+        execution_tasks=[ExecutionTaskRead.model_validate(task) for task in task_result.all()],
+        permissions=permissions,
+        audit_events=[AuditEventRead.model_validate(event) for event in audit_result.all()],
+    )

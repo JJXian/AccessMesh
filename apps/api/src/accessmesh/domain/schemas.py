@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from accessmesh.domain.enums import (
     ApprovalDecision,
     Environment,
+    ExecutionTaskStatus,
     IntentField,
     PermissionStatus,
     RequestStatus,
@@ -149,6 +150,82 @@ class AuditEventPageRead(BaseModel):
     total: int = Field(ge=0)
     page: int = Field(ge=1)
     page_size: int = Field(ge=1)
+
+
+class ProposedGrantDetailRead(BaseModel):
+    """申请详情中展示的单条候选授权方案。"""
+
+    id: UUID
+    resource_external_id: str
+    resource_name: str
+    resource_type: ResourceType
+    environment: Environment
+    sensitivity: str
+    permission: str
+    duration_days: int
+    reason: str
+    evidence_refs: list[str]
+    plan_version: int
+    created_at: datetime
+
+
+class PolicyDecisionDetailRead(BaseModel):
+    """申请详情中展示的单条 OPA 策略决策。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    proposed_grant_id: UUID
+    allow: bool
+    risk_level: str
+    violations: list[dict[str, Any]]
+    required_approvals: list[str]
+    max_duration_days: int | None
+    policy_version: str
+    created_at: datetime
+
+
+class ExecutionTaskRead(BaseModel):
+    """申请详情中展示的单条授权执行任务。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    proposed_grant_id: UUID
+    status: ExecutionTaskStatus
+    attempt_count: int
+    result: dict[str, Any]
+    error_message: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PermissionLifecycleRead(BaseModel):
+    """申请详情中展示的权限实例及其完整生命周期。"""
+
+    id: UUID
+    execution_task_id: UUID
+    resource_external_id: str
+    resource_name: str
+    permission: str
+    status: PermissionStatus
+    external_grant_id: str
+    granted_at: datetime
+    expires_at: datetime
+    revoked_at: datetime | None
+    revocation_reason: str | None
+
+
+class AccessRequestDetailRead(BaseModel):
+    """聚合权限申请从规划到回收的完整链路数据。"""
+
+    request: AccessRequestRead
+    proposed_grants: list[ProposedGrantDetailRead]
+    policy_decisions: list[PolicyDecisionDetailRead]
+    approval: ApprovalRead | None
+    execution_tasks: list[ExecutionTaskRead]
+    permissions: list[PermissionLifecycleRead]
+    audit_events: list[AuditEventRead]
 
 
 class ParsedIntent(BaseModel):
