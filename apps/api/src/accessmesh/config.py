@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     demo_identity_enabled: bool = True
     default_demo_subject_id: str = "user-requester"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    llm_provider: str = "openai-compatible"
+    llm_base_url: str = ""
+    llm_api_key: SecretStr = SecretStr("")
+    llm_model: str = ""
+    llm_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    llm_max_retries: int = Field(default=2, ge=0, le=5)
+    llm_trust_env: bool = False
 
 
 @lru_cache
