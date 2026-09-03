@@ -129,6 +129,16 @@ class PermissionInstanceRead(BaseModel):
     revoked_at: datetime | None
 
 
+class PermissionRevocationCreate(BaseModel):
+    """手工提前回收权限时提交的原因。"""
+
+    reason: str = Field(
+        min_length=2,
+        max_length=500,
+        description="提前回收原因，用于审计追踪。",
+    )
+
+
 class AuditEventRead(BaseModel):
     """对外展示权限治理链路中的单条审计事件。"""
 

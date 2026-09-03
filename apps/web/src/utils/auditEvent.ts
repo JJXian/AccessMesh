@@ -8,9 +8,9 @@ export const auditEventOptions = [
   { value: 'ACCESS_EXECUTION_STARTED', label: '授权执行开始' },
   { value: 'ACCESS_EXECUTION_COMPLETED', label: '授权执行完成' },
   { value: 'ACCESS_EXECUTION_FAILED', label: '授权执行失败' },
-  { value: 'ACCESS_PERMISSION_REVOKED', label: '到期权限已回收' },
+  { value: 'ACCESS_PERMISSION_REVOKED', label: '权限已回收' },
   { value: 'ACCESS_REQUEST_REVOKED', label: '申请权限已全部回收' },
-  { value: 'ACCESS_REVOCATION_FAILED', label: '到期权限回收失败' },
+  { value: 'ACCESS_REVOCATION_FAILED', label: '权限回收失败' },
 ] as const
 
 /** 将事件类型转换为中文业务动作。 */

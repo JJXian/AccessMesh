@@ -15,7 +15,12 @@ from accessmesh.domain.enums import (
     RequestStatus,
     ResourceType,
 )
-from accessmesh.execution.revocation import revoke_expired_permissions
+from accessmesh.execution.revocation import (
+    RevocationConflictError,
+    RevocationOperationError,
+    revoke_expired_permissions,
+    revoke_permission_manually,
+)
 
 
 class FakeRegistry:
@@ -149,3 +154,92 @@ async def test_failed_revocation_remains_active_for_retry() -> None:
     assert permission.revoked_at is None
     assert request.status == RequestStatus.ACTIVE
     assert [event.event_type for event in audit_events] == ["ACCESS_REVOCATION_FAILED"]
+
+
+@pytest.mark.asyncio
+async def test_active_permission_can_be_revoked_manually() -> None:
+    """审批人提前回收最后一条权限后，应同时关闭所属申请并留下原因。"""
+
+    permission, resource, request, _ = build_expired_permission()
+    query_result = MagicMock()
+    query_result.one_or_none.return_value = (permission, resource, request)
+
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=query_result)
+    session.flush = AsyncMock()
+    session.scalar = AsyncMock(return_value=0)
+
+    result = await revoke_permission_manually(
+        session,
+        permission_id=permission.id,
+        actor_external_id="user-approver",
+        reason="项目任务提前结束",
+        registry=FakeRegistry(InMemoryResourceAdapter("database")),
+    )
+
+    audit_events = [call.args[0] for call in session.add.call_args_list]
+
+    assert result.permission is permission
+    assert result.resource is resource
+    assert permission.status == PermissionStatus.REVOKED
+    assert permission.revoked_at is not None
+    assert permission.revocation_reason == "项目任务提前结束"
+    assert request.status == RequestStatus.REVOKED
+    assert {event.event_type for event in audit_events} == {
+        "ACCESS_PERMISSION_REVOKED",
+        "ACCESS_REQUEST_REVOKED",
+    }
+    assert audit_events[0].actor_external_id == "user-approver"
+    assert audit_events[0].payload["revocation_type"] == "MANUAL"
+
+
+@pytest.mark.asyncio
+async def test_revoked_permission_cannot_be_revoked_again() -> None:
+    """权限已回收时应在调用外部适配器前拒绝重复操作。"""
+
+    permission, resource, request, _ = build_expired_permission()
+    permission.status = PermissionStatus.REVOKED
+    query_result = MagicMock()
+    query_result.one_or_none.return_value = (permission, resource, request)
+
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=query_result)
+
+    with pytest.raises(RevocationConflictError, match="已经回收"):
+        await revoke_permission_manually(
+            session,
+            permission_id=permission.id,
+            actor_external_id="user-approver",
+            reason="重复撤权测试",
+            registry=FakeRegistry(InMemoryResourceAdapter("database")),
+        )
+
+    session.flush.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_manual_revocation_failure_does_not_change_permission() -> None:
+    """外部系统撤权失败时，不得把数据库中的权限误标记为已回收。"""
+
+    permission, resource, request, _ = build_expired_permission()
+    query_result = MagicMock()
+    query_result.one_or_none.return_value = (permission, resource, request)
+
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=query_result)
+
+    with pytest.raises(RevocationOperationError, match="模拟撤权失败"):
+        await revoke_permission_manually(
+            session,
+            permission_id=permission.id,
+            actor_external_id="user-approver",
+            reason="安全风险处置",
+            registry=FakeRegistry(FailedRevokeAdapter("database")),
+        )
+
+    assert permission.status == PermissionStatus.ACTIVE
+    assert permission.revoked_at is None
+    assert request.status == RequestStatus.ACTIVE
+    failure_event = session.add.call_args.args[0]
+    assert failure_event.event_type == "ACCESS_REVOCATION_FAILED"
+    assert failure_event.payload["revocation_type"] == "MANUAL"

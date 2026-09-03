@@ -1,18 +1,81 @@
 """已生效权限实例查询接口。"""
 
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from accessmesh.api.dependencies import get_current_demo_user
+from accessmesh.api.dependencies import get_current_demo_user, require_roles
 from accessmesh.db.models import DemoUser, PermissionInstance, Resource
 from accessmesh.db.session import get_db
 from accessmesh.domain.enums import PermissionStatus
-from accessmesh.domain.schemas import PermissionInstanceRead
+from accessmesh.domain.schemas import PermissionInstanceRead, PermissionRevocationCreate
+from accessmesh.execution.revocation import (
+    RevocationConflictError,
+    RevocationNotFoundError,
+    RevocationOperationError,
+    revoke_permission_manually,
+)
 
 router = APIRouter()
+
+
+@router.post("/{permission_id}/revoke", response_model=PermissionInstanceRead)
+async def revoke_permission(
+    permission_id: UUID,
+    payload: PermissionRevocationCreate,
+    current_approver: Annotated[
+        DemoUser,
+        Depends(require_roles("approver")),
+    ],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> PermissionInstanceRead:
+    """由审批人手工提前回收一条有效权限。"""
+
+    try:
+        result = await revoke_permission_manually(
+            session,
+            permission_id=permission_id,
+            actor_external_id=current_approver.external_id,
+            reason=payload.reason,
+        )
+        await session.commit()
+    except RevocationNotFoundError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except RevocationConflictError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except RevocationOperationError as exc:
+        # 权限状态没有改变，但失败事件需要提交，保证外部调用失败也可审计。
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    permission = result.permission
+    resource = result.resource
+    return PermissionInstanceRead(
+        id=permission.id,
+        request_id=permission.request_id,
+        subject_external_id=permission.subject_external_id,
+        resource_external_id=resource.external_id,
+        resource_name=resource.name,
+        permission=permission.permission,
+        status=permission.status,
+        granted_at=permission.granted_at,
+        expires_at=permission.expires_at,
+        revoked_at=permission.revoked_at,
+    )
 
 
 @router.get("", response_model=list[PermissionInstanceRead])

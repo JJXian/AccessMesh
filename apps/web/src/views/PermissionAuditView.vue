@@ -6,6 +6,7 @@ import {
   listActivePermissions,
   listAuditEvents,
   listResources,
+  revokePermission,
 } from '../api/accessmesh'
 import { useIdentityStore } from '../stores/identity'
 import type {
@@ -33,6 +34,10 @@ const auditPage = ref(1)
 const auditPageSize = ref(10)
 const detailVisible = ref(false)
 const selectedEvent = ref<AuditEvent | null>(null)
+const revocationVisible = ref(false)
+const revocationLoading = ref(false)
+const selectedPermission = ref<PermissionInstance | null>(null)
+const revocationReason = ref('')
 
 const filters = reactive({
   requestId: '',
@@ -151,6 +156,36 @@ function showEventDetail(event: AuditEvent) {
   detailVisible.value = true
 }
 
+/** 打开提前回收弹窗，并记录当前准备撤销的权限。 */
+function showRevocationDialog(permission: PermissionInstance) {
+  selectedPermission.value = permission
+  revocationReason.value = ''
+  revocationVisible.value = true
+}
+
+/** 提交回收原因；成功后重新加载权限和审计记录。 */
+async function submitRevocation() {
+  if (!selectedPermission.value) return
+
+  const reason = revocationReason.value.trim()
+  if (reason.length < 2) {
+    ElMessage.warning('请填写至少 2 个字的回收原因')
+    return
+  }
+
+  revocationLoading.value = true
+  try {
+    await revokePermission(selectedPermission.value.id, reason)
+    revocationVisible.value = false
+    ElMessage.success('权限已回收，并完成外部状态验证')
+    await Promise.all([loadPermissions(), loadAuditEvents()])
+  } catch {
+    ElMessage.error('权限回收失败，请刷新后重试或查看后端日志')
+  } finally {
+    revocationLoading.value = false
+  }
+}
+
 /** 以缩进 JSON 展示事件载荷，方便排查链路数据。 */
 function formatPayload(payload: Record<string, unknown>): string {
   return JSON.stringify(payload, null, 2)
@@ -238,8 +273,67 @@ onBeforeUnmount(() => {
             {{ formatDateTime(scope.row.expires_at) }}
           </template>
         </el-table-column>
+
+        <el-table-column
+          v-if="identity.currentUser?.role === 'approver'"
+          label="操作"
+          width="120"
+          align="center"
+        >
+          <template #default="scope">
+            <el-button
+              type="danger"
+              link
+              @click="showRevocationDialog(scope.row)"
+            >
+              提前回收
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
+
+    <el-dialog
+      v-model="revocationVisible"
+      title="提前回收权限"
+      width="520px"
+    >
+      <el-alert
+        title="回收后该权限将立即失效，操作会写入审计记录。"
+        type="warning"
+        show-icon
+        :closable="false"
+      />
+      <el-descriptions v-if="selectedPermission" :column="1" border class="revocation-detail">
+        <el-descriptions-item label="权限主体">
+          {{ formatSubject(selectedPermission.subject_external_id) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="资源">
+          {{ selectedPermission.resource_name }}
+        </el-descriptions-item>
+        <el-descriptions-item label="权限">
+          {{ selectedPermission.permission }}
+        </el-descriptions-item>
+      </el-descriptions>
+      <el-input
+        v-model="revocationReason"
+        type="textarea"
+        :rows="3"
+        maxlength="500"
+        show-word-limit
+        placeholder="请填写提前回收原因，例如：项目任务已提前结束"
+      />
+      <template #footer>
+        <el-button @click="revocationVisible = false">取消</el-button>
+        <el-button
+          type="danger"
+          :loading="revocationLoading"
+          @click="submitRevocation"
+        >
+          确认回收
+        </el-button>
+      </template>
+    </el-dialog>
 
     <el-card shadow="never" class="section-card">
       <template #header>

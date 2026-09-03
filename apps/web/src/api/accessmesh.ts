@@ -93,6 +93,18 @@ export async function listActivePermissions(): Promise<PermissionInstance[]> {
   return data
 }
 
+/** 由审批人手工提前回收一条仍然有效的权限。 */
+export async function revokePermission(
+  permissionId: string,
+  reason: string,
+): Promise<PermissionInstance> {
+  const { data } = await client.post<PermissionInstance>(
+    `/permissions/${permissionId}/revoke`,
+    { reason },
+  )
+  return data
+}
+
 /** 按页查询当前身份可见的审计事件。 */
 export async function listAuditEvents(params: {
   page: number
