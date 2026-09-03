@@ -19,6 +19,7 @@ def build_settings(**overrides: object) -> Settings:
     """创建不会访问真实模型服务的测试配置。"""
 
     return Settings(
+        llm_provider="deepseek",
         llm_base_url="https://llm.example.test/v1",
         llm_api_key="test-secret",
         llm_model="test-model",
@@ -33,7 +34,10 @@ async def test_provider_returns_validated_output_and_metadata() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         request_body = json.loads(request.content)
         assert request.headers["Authorization"] == "Bearer test-secret"
-        assert request_body["response_format"]["type"] == "json_schema"
+        assert request_body["response_format"]["type"] == "json_object"
+        assert request_body["model"] == "test-model"
+        assert request_body["thinking"] == {"type": "disabled"}
+        assert "JSON Schema" in request_body["messages"][0]["content"]
         return httpx.Response(
             200,
             json={

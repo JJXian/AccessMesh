@@ -12,6 +12,8 @@ class AccessRequestState(TypedDict, total=False):
     subject_external_id: str
     raw_request: str
     parsed_intent: dict[str, Any]
+    # 请求解析方式、Prompt版本、耗时和Token等非敏感指标。
+    parser_metadata: dict[str, Any]
     identity_context: dict[str, Any]
     resource_context: dict[str, Any]
     proposed_grants: list[dict[str, Any]]

@@ -1,6 +1,7 @@
 """应用配置定义及配置实例的缓存入口。"""
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -21,10 +22,13 @@ class Settings(BaseSettings):
     demo_identity_enabled: bool = True
     default_demo_subject_id: str = "user-requester"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
-    llm_provider: str = "openai-compatible"
-    llm_base_url: str = ""
+    llm_enabled: bool = False
+    llm_provider: str = "deepseek"
+    llm_base_url: str = "https://api.deepseek.com"
     llm_api_key: SecretStr = SecretStr("")
-    llm_model: str = ""
+    llm_model: str = "deepseek-v4-flash"
+    llm_response_format: Literal["json_object", "json_schema"] = "json_object"
+    llm_max_tokens: int = Field(default=1024, ge=128, le=8192)
     llm_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
     llm_max_retries: int = Field(default=2, ge=0, le=5)
     llm_trust_env: bool = False

@@ -1,6 +1,7 @@
 /** 审计事件类型与中文名称的统一映射。 */
 export const auditEventOptions = [
   { value: 'ACCESS_REQUEST_CREATED', label: '申请已创建' },
+  { value: 'ACCESS_REQUEST_PARSED', label: '申请意图已解析' },
   { value: 'ACCESS_PLAN_CREATED', label: '权限方案已生成' },
   { value: 'ACCESS_POLICY_EVALUATED', label: '策略评估完成' },
   { value: 'ACCESS_REQUEST_APPROVED', label: '审批已通过' },
@@ -38,6 +39,8 @@ export function getAuditEventTagType(
 export function formatSystemActor(externalId: string): string | undefined {
   const systemActors: Record<string, string> = {
     'accessmesh-planner': '权限规划器',
+    'accessmesh-request-parser-agent': '申请解析 Agent',
+    'accessmesh-rule-parser': '规则解析器',
     'accessmesh-expiry-scanner': '到期回收任务',
     opa: 'OPA 策略引擎',
   }

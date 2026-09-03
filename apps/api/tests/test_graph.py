@@ -2,7 +2,9 @@
 
 import pytest
 
+from accessmesh.domain.schemas import ParsedIntent
 from accessmesh.graph.workflow import build_access_request_graph
+from accessmesh.llm.provider import LlmCallMetadata, LlmCallResult
 
 
 @pytest.mark.asyncio
@@ -143,3 +145,40 @@ async def test_graph_runs_configured_policy_evaluator() -> None:
     assert result["policy_decisions"][0]["allow"] is True
     assert len(evaluated_states) == 1
     assert evaluated_states[0]["proposed_grants"][0]["permission"] == "read_only"
+
+
+@pytest.mark.asyncio
+async def test_graph_uses_configured_llm_request_parser() -> None:
+    """启用 LLM 解析器后，工作流应使用其结果并保留非敏感调用指标。"""
+
+    async def fake_request_parser(_: str) -> LlmCallResult[ParsedIntent]:
+        return LlmCallResult(
+            output=ParsedIntent(
+                task="排查支付接口异常",
+                resource_hints=["支付测试数据库"],
+                action_hints=["查询"],
+                duration_days=3,
+            ),
+            metadata=LlmCallMetadata(
+                provider="deepseek",
+                model="deepseek-v4-flash",
+                latency_ms=120,
+                attempt_count=1,
+                prompt_tokens=30,
+                completion_tokens=20,
+                total_tokens=50,
+            ),
+        )
+
+    graph = build_access_request_graph(request_parser=fake_request_parser)
+    result = await graph.ainvoke(
+        {
+            "raw_request": "申请支付测试数据库查询权限三天。",
+            "resource_context": {"resources": []},
+        }
+    )
+
+    assert result["parsed_intent"]["duration_days"] == 3
+    assert result["parser_metadata"]["mode"] == "llm"
+    assert result["parser_metadata"]["model"] == "deepseek-v4-flash"
+    assert result["parser_metadata"]["total_tokens"] == 50

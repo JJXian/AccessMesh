@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from accessmesh.agents.request_parser import LlmRequestParser
 from accessmesh.api.dependencies import (
     get_current_demo_user,
     require_roles,
@@ -47,6 +48,11 @@ from accessmesh.execution.service import (
     execute_approved_request,
 )
 from accessmesh.graph.workflow import build_access_request_graph
+from accessmesh.llm.provider import (
+    LlmConfigurationError,
+    LlmProviderError,
+    OpenAICompatibleProvider,
+)
 from accessmesh.planning.persistence import persist_proposed_grants
 from accessmesh.policy.client import OpaPolicyClient, PolicyUnavailableError
 from accessmesh.policy.evaluator import OpaPolicyEvaluator
@@ -99,12 +105,18 @@ async def create_access_request(
         )
     )
 
+    settings = get_settings()
     context_loader = ResourceContextLoader(session)
-    policy_client = OpaPolicyClient(get_settings())
+    policy_client = OpaPolicyClient(settings)
     policy_evaluator = OpaPolicyEvaluator(policy_client)
+    request_parser = None
+    if settings.llm_enabled:
+        # LLM 只负责解析用户意图；它不会获得审批或授权工具。
+        request_parser = LlmRequestParser(OpenAICompatibleProvider(settings)).parse
     graph = build_access_request_graph(
         context_loader=context_loader.load,
         policy_evaluator=policy_evaluator.evaluate,
+        request_parser=request_parser,
     )
 
     try:
@@ -130,6 +142,13 @@ async def create_access_request(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="策略服务暂不可用，请稍后重试。",
         ) from exc
+    except (LlmConfigurationError, LlmProviderError) as exc:
+        # 启用 LLM 后不静默切回规则解析，避免使用者误以为请求经过了模型。
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="请求解析模型暂不可用，请检查模型配置或稍后重试。",
+        ) from exc
 
     candidate_grants = [
         CandidateGrant.model_validate(grant) for grant in workflow_result["proposed_grants"]
@@ -151,6 +170,22 @@ async def create_access_request(
         policy_decisions=persisted_decisions,
     )
 
+    session.add(
+        AuditEvent(
+            request_id=request.id,
+            trace_id=trace_id,
+            event_type="ACCESS_REQUEST_PARSED",
+            actor_external_id=(
+                "accessmesh-request-parser-agent"
+                if workflow_result["parser_metadata"]["mode"] == "llm"
+                else "accessmesh-rule-parser"
+            ),
+            payload={
+                "parsed_intent": workflow_result["parsed_intent"],
+                "parser_metadata": workflow_result["parser_metadata"],
+            },
+        )
+    )
     session.add(
         AuditEvent(
             request_id=request.id,

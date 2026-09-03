@@ -1,6 +1,7 @@
 """统一的结构化大语言模型调用入口。"""
 
 import asyncio
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from time import perf_counter
@@ -167,22 +168,40 @@ class OpenAICompatibleProvider:
     ) -> dict[str, Any]:
         """构建要求模型严格返回 JSON Schema 的请求体。"""
 
-        return {
+        schema = response_model.model_json_schema()
+        schema_instruction = (
+            "\n请只输出一个合法 JSON 对象，不要使用 Markdown 代码块。"
+            f"输出必须符合以下 JSON Schema：{json.dumps(schema, ensure_ascii=False)}"
+        )
+        body: dict[str, Any] = {
             "model": self._settings.llm_model,
             "temperature": 0,
+            "max_tokens": self._settings.llm_max_tokens,
             "messages": [
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": f"{system_prompt}{schema_instruction}"},
                 {"role": "user", "content": user_prompt},
             ],
-            "response_format": {
+        }
+
+        if self._settings.llm_response_format == "json_schema":
+            body["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
                     "name": response_model.__name__,
                     "strict": True,
-                    "schema": response_model.model_json_schema(),
+                    "schema": schema,
                 },
-            },
-        }
+            }
+        else:
+            # DeepSeek Chat Completions 当前使用 json_object 模式；
+            # 字段级约束继续由下方 Pydantic 校验负责。
+            body["response_format"] = {"type": "json_object"}
+
+        if self._settings.llm_provider == "deepseek":
+            # 权限意图提取属于确定性结构化任务，不需要额外输出推理过程。
+            body["thinking"] = {"type": "disabled"}
+
+        return body
 
     @staticmethod
     def _parse_output(payload: dict[str, Any], response_model: type[ResponseT]) -> ResponseT:
