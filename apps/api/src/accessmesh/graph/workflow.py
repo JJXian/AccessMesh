@@ -94,10 +94,15 @@ def create_plan(state: AccessRequestState) -> dict[str, Any]:
 
 def build_access_request_graph(
     context_loader: ContextLoader | None = None,
+    identity_context_loader: ContextLoader | None = None,
+    resource_context_loader: ContextLoader | None = None,
     policy_evaluator: PolicyEvaluator | None = None,
     request_parser: RequestParserAgent | None = None,
 ) -> Any:
-    """构建解析、上下文、规划和可选策略评估组成的工作流。"""
+    """构建解析、并行上下文、规划和可选策略评估组成的工作流。"""
+
+    if (identity_context_loader is None) != (resource_context_loader is None):
+        raise ValueError("身份与资源上下文加载器必须同时配置。")
 
     async def collect_context_node(
         state: AccessRequestState,
@@ -123,14 +128,44 @@ def build_access_request_graph(
 
         return await parse_request(state, request_parser)
 
+    async def collect_identity_context_node(
+        state: AccessRequestState,
+    ) -> dict[str, Any]:
+        """在独立分支中收集权限主体身份上下文。"""
+
+        assert identity_context_loader is not None
+        return await identity_context_loader(state)
+
+    async def collect_resource_context_node(
+        state: AccessRequestState,
+    ) -> dict[str, Any]:
+        """在独立分支中收集可申请资源上下文。"""
+
+        assert resource_context_loader is not None
+        return await resource_context_loader(state)
+
     builder = StateGraph(AccessRequestState)
     builder.add_node("parse_request", parse_request_node)
-    builder.add_node("collect_context", collect_context_node)
     builder.add_node("create_plan", create_plan)
 
     builder.add_edge(START, "parse_request")
-    builder.add_edge("parse_request", "collect_context")
-    builder.add_edge("collect_context", "create_plan")
+
+    if identity_context_loader is not None and resource_context_loader is not None:
+        builder.add_node("collect_identity_context", collect_identity_context_node)
+        builder.add_node("collect_resource_context", collect_resource_context_node)
+        # 同一个解析结果同时触发两个只读 Agent，减少串行查询等待时间。
+        builder.add_edge("parse_request", "collect_identity_context")
+        builder.add_edge("parse_request", "collect_resource_context")
+        # 列表形式的边表示两个上游都完成后，规划节点才允许执行一次。
+        builder.add_edge(
+            ["collect_identity_context", "collect_resource_context"],
+            "create_plan",
+        )
+    else:
+        # 保留组合加载器入口，兼容已有测试和不需要并发的调用场景。
+        builder.add_node("collect_context", collect_context_node)
+        builder.add_edge("parse_request", "collect_context")
+        builder.add_edge("collect_context", "create_plan")
 
     # 保留“无策略评估器”的模式，让之前纯规划测试继续成立。
     if policy_evaluator is None:

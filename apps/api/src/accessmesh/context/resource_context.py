@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from accessmesh.agents.identity_context import IdentityContextAgent
 from accessmesh.agents.resource_context import ResourceContextAgent
 from accessmesh.db.models import Resource
+from accessmesh.db.session import AsyncSessionLocal
 from accessmesh.graph.state import AccessRequestState
 from accessmesh.identity.provider import DemoIdentityProvider
 
@@ -49,3 +50,19 @@ class ResourceContextLoader:
             **resource_result,
             "status": "PLANNING",
         }
+
+
+async def load_identity_context(state: AccessRequestState) -> dict[str, Any]:
+    """使用独立数据库会话运行身份 Agent，允许与资源查询安全并发。"""
+
+    async with AsyncSessionLocal() as session:
+        agent = IdentityContextAgent(DemoIdentityProvider(session))
+        return await agent.collect(state)
+
+
+async def load_resource_context(state: AccessRequestState) -> dict[str, Any]:
+    """使用独立数据库会话运行资源 Agent，允许与身份查询安全并发。"""
+
+    async with AsyncSessionLocal() as session:
+        agent = ResourceContextAgent(PostgresResourceLookup(session))
+        return await agent.collect(state)

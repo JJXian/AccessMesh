@@ -14,7 +14,10 @@ from accessmesh.api.dependencies import (
     require_roles,
 )
 from accessmesh.config import get_settings
-from accessmesh.context.resource_context import ResourceContextLoader
+from accessmesh.context.resource_context import (
+    load_identity_context,
+    load_resource_context,
+)
 from accessmesh.db.models import (
     AccessRequest,
     Approval,
@@ -104,7 +107,6 @@ async def create_access_request(
     )
 
     settings = get_settings()
-    context_loader = ResourceContextLoader(session)
     policy_client = OpaPolicyClient(settings)
     policy_evaluator = OpaPolicyEvaluator(policy_client)
     request_parser = None
@@ -112,7 +114,8 @@ async def create_access_request(
         # LLM 只负责解析用户意图；它不会获得审批或授权工具。
         request_parser = LlmRequestParser(OpenAICompatibleProvider(settings)).parse
     graph = build_access_request_graph(
-        context_loader=context_loader.load,
+        identity_context_loader=load_identity_context,
+        resource_context_loader=load_resource_context,
         policy_evaluator=policy_evaluator.evaluate,
         request_parser=request_parser,
     )
