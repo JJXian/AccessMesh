@@ -96,6 +96,23 @@ body { margin: 0; min-width: 1100px; background: #f4f6fa; }
   margin-top: 14px;
 }
 
+.policy-explanation-list {
+  padding: 0;
+  margin: 0;
+  color: #529b2e;
+  line-height: 1.6;
+  list-style: none;
+}
+
+.policy-explanation-list.is-denied {
+  color: #f56c6c;
+}
+
+.policy-explanation-list.is-denied li::before {
+  margin-right: 6px;
+  content: "•";
+}
+
 .request-audit-timeline {
   padding: 10px 20px 0;
 }

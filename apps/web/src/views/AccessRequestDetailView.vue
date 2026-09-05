@@ -131,6 +131,33 @@ function findPolicyDecision(
   )
 }
 
+/** 将 OPA 违规代码转换成申请人容易理解的中文说明。 */
+function formatPolicyViolation(violation: Record<string, unknown>): string {
+  const code = typeof violation.code === 'string' ? violation.code : ''
+  const message = typeof violation.message === 'string'
+    ? violation.message
+    : ''
+  const labels: Record<string, string> = {
+    SUBJECT_INACTIVE: '权限主体当前不是在职状态',
+    RESOURCE_DISABLED: '目标资源已停用，暂时不能申请',
+    INVALID_PERMISSION: '候选权限不在该资源允许申请的范围内',
+    DURATION_EXCEEDED: '申请期限超过当前环境允许的最长时间',
+    CONTRACTOR_PRODUCTION_DENIED: '外包人员禁止访问生产环境资源',
+  }
+
+  return labels[code] || message || code || 'OPA 未返回具体拒绝原因'
+}
+
+/** 返回一条候选权限在页面上需要展示的策略说明。 */
+function getPolicyExplanations(grant: ProposedGrantDetail): string[] {
+  const decision = findPolicyDecision(grant)
+  if (!decision) return ['尚未进行策略评估']
+  if (decision.allow) return ['已通过全部策略检查']
+  if (decision.violations.length === 0) return ['OPA 拒绝了申请，但未返回具体原因']
+
+  return decision.violations.map(formatPolicyViolation)
+}
+
 /** 获取执行任务对应的候选资源名称。 */
 function findGrantResource(proposedGrantId: string): string {
   return detail.value?.proposed_grants.find(
@@ -317,6 +344,23 @@ onBeforeUnmount(() => {
               >
                 {{ formatRiskLevel(findPolicyDecision(scope.row)?.risk_level ?? '') }}
               </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="策略说明" min-width="250">
+            <template #default="scope">
+              <ul
+                class="policy-explanation-list"
+                :class="{
+                  'is-denied': findPolicyDecision(scope.row)?.allow === false,
+                }"
+              >
+                <li
+                  v-for="explanation in getPolicyExplanations(scope.row)"
+                  :key="explanation"
+                >
+                  {{ explanation }}
+                </li>
+              </ul>
             </template>
           </el-table-column>
           <el-table-column prop="reason" label="规划理由" min-width="260" />
