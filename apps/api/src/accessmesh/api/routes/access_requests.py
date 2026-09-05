@@ -7,16 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from accessmesh.agents.identity_context import SubjectNotFoundError
 from accessmesh.agents.request_parser import LlmRequestParser
 from accessmesh.api.dependencies import (
     get_current_demo_user,
     require_roles,
 )
 from accessmesh.config import get_settings
-from accessmesh.context.resource_context import (
-    ResourceContextLoader,
-    SubjectNotFoundError,
-)
+from accessmesh.context.resource_context import ResourceContextLoader
 from accessmesh.db.models import (
     AccessRequest,
     Approval,
